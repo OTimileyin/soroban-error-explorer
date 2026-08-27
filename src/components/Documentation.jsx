@@ -49,7 +49,7 @@ export default function Documentation() {
         </div>
         <p>
           Complete guide to the TrapTrace operational diagnostics platform: Python CLI (v0.3.0), JavaScript/TypeScript SDK (@traptrace/sdk),
-          state archival lifecycles (CAP-0046), contract authorization trees, and 21 testnet-verified error patterns.
+          state archival lifecycles (CAP-0046), contract authorization trees, and 29 testnet-verified error patterns.
         </p>
       </div>
 
@@ -116,7 +116,16 @@ traptrace fix arith-error --export-rs fix.rs
 traptrace diff <TX_HASH_1> <TX_HASH_2>
 
 # Inspect contract WASM ABI and exported specifications
-traptrace abi <CONTRACT_ID> --network testnet`}</code>
+traptrace abi <CONTRACT_ID> --network testnet
+
+# Run static smart contract linter
+traptrace lint <CONTRACT_FILE.rs>
+
+# Profile gas, memory, and footprint of simulation
+traptrace profile <TX_ENVELOPE_XDR>
+
+# Generate Soroban SDK reproduction unit tests
+traptrace generate-test <ERROR_ID>`}</code>
             </pre>
           </section>
 
@@ -152,7 +161,13 @@ const simResult = await client.simulateTransaction(txXdr);
 const auth = validateAuthTree(txXdr);
 if (!auth.isValid) {
   console.error("Auth Failure:", auth.issues);
-}`}</code>
+}
+
+// 4. Run static linter on contract source
+import { lintContractCode, profileSimulation, generateRustTest } from '@traptrace/sdk';
+const lintReport = lintContractCode(contractCode);
+const profile = profileSimulation(simResult);
+const rustTest = generateRustTest('arith-error');`}</code>
             </pre>
           </section>
 
@@ -218,7 +233,7 @@ env.storage().persistent().extend_ttl(&storage_key, 1000, 100000);`}</code>
               <Shield color="var(--color-trace-teal)" size={20} /> 5. Schema &amp; Testnet Verification Harness
             </h2>
             <p style={{ color: 'var(--color-text-muted)', fontSize: '14px', marginBottom: '16px' }}>
-              All 21 catalog entries in <code className="code-inline">soroban-error-index</code> are backed by empirical testnet execution logs in <code className="code-inline">verification/</code>, validated with JSON Schema in CI.
+              All 29 catalog entries in <code className="code-inline">soroban-error-index</code> are backed by empirical testnet execution logs in <code className="code-inline">verification/</code>, validated with JSON Schema in CI.
             </p>
 
             <pre className="code-block">

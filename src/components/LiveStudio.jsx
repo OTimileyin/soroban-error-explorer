@@ -24,7 +24,10 @@ import {
   Download,
   Share2,
   Bookmark,
-  History
+  History,
+  ShieldAlert,
+  BarChart2,
+  TestTube
 } from 'lucide-react';
 import { 
   NETWORKS, 
@@ -42,6 +45,9 @@ import FixViewerTab from './FixViewerTab';
 import AbiInspectorTab from './AbiInspectorTab';
 import InvocationSandboxTab from './InvocationSandboxTab';
 import WebhookModal from './WebhookModal';
+import LinterTab from './LinterTab';
+import ProfilerTab from './ProfilerTab';
+import TestGenTab from './TestGenTab';
 
 // Demo Presets for One-Click Reviewer Testing
 const DEMO_PRESETS = {
@@ -170,7 +176,7 @@ export default function LiveStudio({ catalogEntries, onSelectEntry }) {
       if (netParam && NETWORKS[netParam]) {
         setNetwork(netParam);
       }
-      if (toolParam && ['inspect', 'simulate', 'decode', 'storage', 'watch'].includes(toolParam)) {
+      if (toolParam && ['inspect', 'simulate', 'decode', 'storage', 'watch', 'batch', 'auth', 'fix', 'abi', 'sandbox', 'lint', 'profile', 'testgen'].includes(toolParam)) {
         setActiveTool(toolParam);
       }
       if (txParam) {
@@ -484,6 +490,27 @@ export default function LiveStudio({ catalogEntries, onSelectEntry }) {
             style={{ fontSize: '13px', padding: '8px 14px' }}
           >
             <Play size={14} /> Sandbox
+          </button>
+          <button
+            className={`btn ${activeTool === 'lint' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTool('lint')}
+            style={{ fontSize: '13px', padding: '8px 14px' }}
+          >
+            <ShieldAlert size={14} /> Smart Linter
+          </button>
+          <button
+            className={`btn ${activeTool === 'profile' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTool('profile')}
+            style={{ fontSize: '13px', padding: '8px 14px' }}
+          >
+            <BarChart2 size={14} /> Gas Profiler
+          </button>
+          <button
+            className={`btn ${activeTool === 'testgen' ? 'btn-primary' : 'btn-secondary'}`}
+            onClick={() => setActiveTool('testgen')}
+            style={{ fontSize: '13px', padding: '8px 14px' }}
+          >
+            <TestTube size={14} /> Rust Test Gen
           </button>
         </div>
 
@@ -1355,6 +1382,15 @@ export default function LiveStudio({ catalogEntries, onSelectEntry }) {
 
       {/* TOOL 10: INVOCATION SANDBOX */}
       {activeTool === 'sandbox' && <InvocationSandboxTab network={network} />}
+
+      {/* TOOL 11: SMART CONTRACT LINTER */}
+      {activeTool === 'lint' && <LinterTab />}
+
+      {/* TOOL 12: RESOURCE & GAS PROFILER */}
+      {activeTool === 'profile' && <ProfilerTab />}
+
+      {/* TOOL 13: RUST TEST GENERATOR */}
+      {activeTool === 'testgen' && <TestGenTab catalogEntries={catalogEntries} />}
     </div>
   );
 }

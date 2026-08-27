@@ -23,6 +23,32 @@
     "references": "- [Soroban CLI Identity Management](https://developers.stellar.org/docs/tools/developer-tools/cli/keys)"
   },
   {
+    "id": "contract-spec-missing",
+    "title": "CLI Error - WASM Contract Specification (ABI) Metadata Missing or Stripped",
+    "category": "cli-error",
+    "error_code": "CLI::ContractSpecMissing",
+    "verified": true,
+    "summary": "Contract WASM file deployed without embedded contract specification custom sections, preventing automated ABI decoding, binding generation, and CLI inspection.",
+    "tags": [
+      "cli-error",
+      "abi",
+      "wasm",
+      "spec",
+      "tooling"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "warning",
+    "related_entries": [
+      "wasm-verification-failed",
+      "host-invalid-action"
+    ],
+    "symptoms": "- `stellar contract bindings` or `soroban contract bindings typescript` fails with `Error: Contract has no spec`.\n- `traptrace abi <contract_id>` or the Web Studio WASM ABI tab indicates `No exported contract functions found`.\n- Block explorers cannot render human-readable method signatures or argument input fields.",
+    "root_causes": "1. **Aggressive WASM Optimization Stripping Custom Sections:** Compiling with `wasm-opt --strip-all` or `wasm-strip` instead of preserving the `.soroban_spec` custom section.\n2. **Missing `contractimpl` Macro Attribute:** Writing Rust methods without decorating the `impl` block with `#[contractimpl]`.\n3. **Manual WASM Assembly:** Compiling raw WASM bytecode without the Soroban SDK build target.",
+    "reproduction_steps": "wasm-opt -Oz --strip-all contract.wasm -o contract_stripped.wasm\nstellar contract bindings typescript --wasm contract_stripped.wasm --output-dir ./bindings",
+    "solutions": "1. **Preserve Custom Sections in `wasm-opt`:** When running `wasm-opt`, use `--strip-debug` instead of `--strip-all` to keep `.soroban_spec`:\n   ```bash\n   wasm-opt -Oz --strip-debug target/wasm32-unknown-unknown/release/contract.wasm -o contract.optimized.wasm\n   ```\n2. **Use `stellar contract build`:** Prefer the official Stellar CLI build command which automatically optimizes while preserving metadata:\n   ```bash\n   stellar contract build\n   ```\n3. **Verify with TrapTrace WASM Inspector:** Use `traptrace abi <contract_id>` to confirm your deployed contract exports valid method specifications.",
+    "references": "- [Soroban CLI Contract Build & Optimization](https://developers.stellar.org/docs/tools/developer-tools/cli/stellar-cli)\n- [Soroban Contract Specification Format](https://developers.stellar.org/docs/learn/smart-contract-internals/types#contract-spec)"
+  },
+  {
     "id": "invalid-chain-id",
     "title": "CLI Error - Network Passphrase or Chain ID Mismatch",
     "category": "cli-error",
@@ -235,6 +261,58 @@
     "references": "- [Stellar Soroban Contract Deployment Guide](https://developers.stellar.org/docs/build/smart-contracts/deploying)"
   },
   {
+    "id": "cross-contract-reentrancy-blocked",
+    "title": "Host Error - Cross-Contract Re-entrancy Blocked",
+    "category": "host-error",
+    "error_code": "HostError::ReentrancyBlocked",
+    "verified": true,
+    "summary": "Soroban host VM detected mutual recursive invocation cycle across contract call frames without explicit reentrancy permissions.",
+    "tags": [
+      "host-error",
+      "reentrancy",
+      "cross-contract",
+      "security",
+      "recursion"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "critical",
+    "related_entries": [
+      "sub-invocation-failed",
+      "budget-exceeded"
+    ],
+    "symptoms": "- Complex cross-contract calls fail with `HostError(Context, ReentrancyBlocked)` or WASM call stack abort.\n- Flash loan or automated market maker (AMM) callbacks fail unexpectedly.\n- Diagnostic events output circular contract invocation traces: `Contract A -> Contract B -> Contract A`.",
+    "root_causes": "1. **Direct Circular Call Stack:** Contract A called Contract B, which attempted to call back into Contract A while execution frame A was still active.\n2. **Reentrancy Guard Activation:** The target contract employs a reentrancy mutex (`storage().instance().set(&LOCKED, &true)`) and detected an interleaved invocation.\n3. **Unchecked Callback Interfaces:** Implementing external hook/callback mechanisms without decoupling state mutations from external dispatch.",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, Address, Env};\n\n#[contract]\npub struct ReentrantContract;\n\n#[contractimpl]\nimpl ReentrantContract {\n    pub fn execute_callback(env: Env, target: Address) {\n        let client = CallbackClient::new(&env, &target);\n        client.on_callback(&env.current_contract_address());\n    }\n}",
+    "solutions": "1. **Checks-Effects-Interactions Pattern:** Perform all internal balance and state updates *before* calling external contract interfaces:\n   ```rust\n   // 1. Checks\n   assert!(balance >= amount);\n   // 2. Effects (Internal State Mutation)\n   env.storage().persistent().set(&user, &(balance - amount));\n   // 3. Interactions (External Call)\n   token_client.transfer(&user, &recipient, &amount);\n   ```\n2. **Asynchronous Architecture / Split Transactions:** Design multi-step workflows across separate ledger transactions rather than deep synchronous nested callbacks.\n3. **Non-Reentrant Status Enums:** Guard state transitions with strict lifecycle status machines instead of nested synchronous queries.",
+    "references": "- [Soroban Cross-Contract Calls & Security](https://developers.stellar.org/docs/learn/smart-contract-internals/cross-contract)\n- [SWC-107: Reentrancy Vulnerability Guidance](https://swcregistry.io/docs/SWC-107)"
+  },
+  {
+    "id": "crypto-curve25519-invalid-scalar",
+    "title": "Host Error - Curve25519 / Ed25519 Invalid Scalar or Point",
+    "category": "host-error",
+    "error_code": "HostError::CryptoScalarInvalid",
+    "verified": true,
+    "summary": "Host cryptographic verification failed due to non-canonical point encoding, invalid scalar length, or scalar out of subgroup range.",
+    "tags": [
+      "host-error",
+      "crypto",
+      "curve25519",
+      "ed25519",
+      "verification"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "critical",
+    "related_entries": [
+      "crypto-verification-failed",
+      "auth-invalid-signature"
+    ],
+    "symptoms": "- Invocations involving custom cryptographic verification panic with `HostError::CryptoScalarInvalid` or `CryptoError`.\n- Zero-knowledge proof (ZKP) or multi-party computation (MPC) threshold signatures fail verification.\n- Diagnostic events output `crypto_ed25519_verify` or `curve25519_scalar_mul` trap codes.",
+    "root_causes": "1. **Non-Canonical Point Encoding:** The passed public key or compressed Montgomery/Edwards point has highest-bit corruption or violates canonical 32-byte representation.\n2. **Scalar Out of Prime Order:** Scalar integer value is greater than or equal to the prime curve group order $L = 2^{252} + 27742317777372353535851937790883648493$.\n3. **Invalid Byte Array Length:** Passing a 64-byte raw signature into a function expecting a 32-byte public key slice or vice versa.",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, BytesN, Env};\n\n#[contract]\npub struct CryptoScalarContract;\n\n#[contractimpl]\nimpl CryptoScalarContract {\n    pub fn verify_scalar(env: Env, invalid_key: BytesN<32>, msg: BytesN<32>, sig: BytesN<64>) {\n        env.crypto().ed25519_verify(&invalid_key, &msg.into(), &sig);\n    }\n}",
+    "solutions": "1. **Canonicalize Public Keys Before Hashing:** Ensure client-side cryptographic libraries serialize keys using strict canonical Little-Endian representation:\n   ```typescript\n   import { Keypair } from '@stellar/stellar-sdk';\n   const canonicalBytes = keypair.rawPublicKey();\n   ```\n2. **Validate Scalar Subgroup Range:** Check scalar values with modulo arithmetic against the group order $L$ before passing to host operations.\n3. **Use Soroban SDK Native Crypto Helpers:** Prefer `env.crypto().ed25519_verify()` over custom WASM-compiled cryptography libraries.",
+    "references": "- [RFC 8032: Edwards-Curve Digital Signature Algorithm (EdDSA)](https://datatracker.ietf.org/doc/html/rfc8032)\n- [Soroban Host Cryptography API](https://docs.rs/soroban-sdk/latest/soroban_sdk/struct.Crypto.html)"
+  },
+  {
     "id": "crypto-verification-failed",
     "title": "Host Error - Cryptographic Signature or Curve Verification Failed",
     "category": "host-error",
@@ -310,6 +388,32 @@
     "reproduction_steps": "use soroban_sdk::{contract, contractimpl, vec, BytesN, Env, Symbol};\n\n#[contract]\npub struct InvalidActionContract;\n\n#[contractimpl]\nimpl InvalidActionContract {\n    pub fn trigger_invalid_event(env: Env) {\n        // Violates topic length limit (max 4 topics allowed in Soroban)\n        let topics = (\n            Symbol::new(&env, \"topic1\"),\n            Symbol::new(&env, \"topic2\"),\n            Symbol::new(&env, \"topic3\"),\n            Symbol::new(&env, \"topic4\"),\n            Symbol::new(&env, \"topic5\"), // Invalid 5th topic\n        );\n        env.events().publish(topics, 100u32);\n    }\n}",
     "solutions": "1. **Verify Cryptographic Key and Signature Lengths:** Ensure public keys are exact 32-byte slices (`BytesN<32>`) and signatures are exact 64-byte slices (`BytesN<64>`) before calling verification host methods.\n2. **Limit Event Topics:** Ensure all event topic tuples contain between 1 and 4 elements maximum.\n3. **Validate Raw Val Handles:** Use SDK wrapper types (`Address`, `Bytes`, `Vec`, `Map`) rather than raw `Val` / `RawVal` representations to prevent uninitialized handle errors.\n4. **Inspect Diagnostic Events:** Run `traptrace inspect <tx_hash>` or check `diagnosticEvents` in the RPC response to pinpoint the exact host function call that triggered `InvalidAction`.",
     "references": "- [Soroban Host Environment Error Codes (rs-soroban-env)](https://github.com/stellar/rs-soroban-env)\n- [Stellar Developers: Smart Contract Events & Topics](https://developers.stellar.org/docs/learn/smart-contract-internals/events)"
+  },
+  {
+    "id": "instance-already-initialized",
+    "title": "Host Error - Smart Contract Instance Already Initialized",
+    "category": "host-error",
+    "error_code": "HostError::ContractAlreadyInitialized",
+    "verified": true,
+    "summary": "Attempting to invoke contract initialization logic on an already initialized contract instance.",
+    "tags": [
+      "host-error",
+      "initialization",
+      "constructor",
+      "security",
+      "state"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "critical",
+    "related_entries": [
+      "host-invalid-action",
+      "sub-invocation-user-error"
+    ],
+    "symptoms": "- Contract deployment and initialization scripts fail with `ContractAlreadyInitialized` or custom init error enum.\n- Re-invoking constructor-style methods like `init()`, `initialize()`, or `set_admin()` reverts on-chain.\n- Transaction simulation fails during contract onboarding flows.",
+    "root_causes": "1. **Re-initialization Guard Triggered:** The contract implementation uses a boolean flag in instance storage (`IS_INIT`) or constructor pattern, and a second invocation was attempted after initial deployment.\n2. **Factory Contract Race Condition:** A factory contract deployed the instance and called `initialize` in the same transaction, followed by an external caller attempting initialization again.\n3. **Missing Idempotency Handling:** The deployment pipeline did not check if the contract was already initialized before calling setup methods.",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, symbol_short, Env, Symbol};\n\nconst IS_INIT: Symbol = symbol_short!(\"IS_INIT\");\n\n#[contract]\npub struct InitializedContract;\n\n#[contractimpl]\nimpl InitializedContract {\n    pub fn initialize(env: Env) -> Result<(), ()> {\n        if env.storage().instance().has(&IS_INIT) {\n            return Err(()); // Already initialized\n        }\n        env.storage().instance().set(&IS_INIT, &true);\n        Ok(())\n    }\n}",
+    "solutions": "1. **Check Initialization State First:** Use `.has(&IS_INIT)` before attempting initialization calls:\n   ```rust\n   if !client.is_initialized() {\n       client.initialize(&admin);\n   }\n   ```\n2. **Use Protocol 21 Native `__constructor`:** Utilize native Soroban constructors that can only execute once during initial instance deployment.\n3. **Atomic Factory Deployment:** Deploy and initialize instances in a single atomic transaction envelope.",
+    "references": "- [Soroban Smart Contract Initialization Patterns](https://developers.stellar.org/docs/learn/smart-contract-internals)\n- [Stellar CAP-0046: Lifecycle Management](https://stellar.org)"
   },
   {
     "id": "instance-storage-expired",
@@ -580,6 +684,32 @@
     "references": "- [Stellar Docs: State Archival & Storage Types](https://developers.stellar.org/docs/learn/smart-contract-internals/state-archival)\n- [CAP-0046: Soroban State Archival](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0046.md)"
   },
   {
+    "id": "unauthorized-storage-access",
+    "title": "Host Error - Unauthorized Contract Storage Footprint Access",
+    "category": "host-error",
+    "error_code": "HostError::StorageAccessUnauthorized",
+    "verified": true,
+    "summary": "Contract execution attempted to access storage ledger keys outside its allocated ledger footprint or across contract security boundaries.",
+    "tags": [
+      "host-error",
+      "storage",
+      "footprint",
+      "security",
+      "permissions"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "critical",
+    "related_entries": [
+      "storage-ledger-entry-not-found",
+      "storage-key-missing"
+    ],
+    "symptoms": "- Transactions fail during on-chain execution with `StorageAccessUnauthorized` or `FootprintMismatch`.\n- Simulation succeeds on local mock environment but fails when submitted to live network RPC.\n- Multi-contract transaction envelopes reject execution before state mutations take effect.",
+    "root_causes": "1. **Cross-Contract Storage Boundary Violation:** Attempting to directly inspect or mutate another contract instance's private storage keys without going through its exported public methods.\n2. **Missing Ledger Footprint in Transaction Envelope:** The transaction envelope omitted read-only or read-write footprint keys required by nested sub-invocations.\n3. **Dynamic Key Resolution Drift:** The contract dynamically computed a storage key at runtime that was not present in the pre-flight simulated footprint.",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, symbol_short, Env, Symbol};\n\n#[contract]\npub struct UnauthorizedStorageContract;\n\n#[contractimpl]\nimpl UnauthorizedStorageContract {\n    pub fn access_foreign_storage(env: Env) {\n        let key = symbol_short!(\"FOREIGN\");\n        let _val: u32 = env.storage().instance().get(&key).unwrap();\n    }\n}",
+    "solutions": "1. **Access Foreign State via Public Methods:** Always query foreign contract data through its exported getter interface:\n   ```rust\n   let target_client = TargetContractClient::new(&env, &target_address);\n   let value = target_client.get_value();\n   ```\n2. **Pre-flight Footprint Synchronization:** Always generate transaction footprints via `simulateTransaction` and attach the exact returned footprint to the signed transaction envelope.\n3. **Inspect Contract Ledger Entries:** Use `traptrace storage --contract <id>` or the Web Studio Storage Auditor to verify valid storage ownership.",
+    "references": "- [Stellar RPC simulateTransaction Footprint Specs](https://developers.stellar.org/docs/data/rpc/api-reference/methods/simulateTransaction)\n- [Soroban Storage Isolation Architecture](https://developers.stellar.org/docs/learn/smart-contract-internals/state-archival)"
+  },
+  {
     "id": "unreachable-code-reached",
     "title": "Host Error - WASM Unreachable Code Reached (Panic)",
     "category": "host-error",
@@ -702,6 +832,32 @@
     "reproduction_steps": "curl -s -X POST https://soroban-testnet.stellar.org \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"jsonrpc\": \"2.0\",\n    \"id\": 1,\n    \"method\": \"getLedgerEntries\",\n    \"params\": {\n      \"keys\": [\n        \"AAAAFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAEAAAAEdGVzdAAAAAA=\"\n      ]\n    }\n  }'",
     "solutions": "1. **Initialize State:** Execute contract setup/init function first.\n2. **Check Archival Status:** Query state archival RPC endpoint to verify if restoration is required.",
     "references": "- [Stellar RPC API Specification: getLedgerEntries](https://developers.stellar.org/docs/data/rpc/api-reference/methods/getLedgerEntries)"
+  },
+  {
+    "id": "tx-simulation-fee-insufficient",
+    "title": "RPC Error - Insufficient Inclusion / Resource Fee for Transaction Submission",
+    "category": "rpc-error",
+    "error_code": "RPC::InsufficientInclusionFee",
+    "verified": true,
+    "summary": "Transaction envelope rejected by RPC node or Horizon because the specified base inclusion fee or resource fee is below current ledger surge requirements.",
+    "tags": [
+      "rpc-error",
+      "fees",
+      "inclusion-fee",
+      "gas",
+      "mempool"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "warning",
+    "related_entries": [
+      "budget-exceeded",
+      "tx-failed-bad-seq"
+    ],
+    "symptoms": "- `sendTransaction` RPC requests fail immediately with `txINSUFFICIENT_FEE` or `RESOURCE_LIMIT_EXCEEDED`.\n- Transactions stall in mempool during high network congestion or surge pricing.\n- Automated bots and relayer transactions fail with fee rejection errors.",
+    "root_causes": "1. **Fee Below Network Base Reserve:** Specifying a `base_fee` lower than 100 stroops per operation (the Stellar protocol minimum).\n2. **Surge Pricing Spike:** During network traffic surges, the minimum inclusion fee escalates beyond the pre-set max fee in the transaction envelope.\n3. **Outdated `minResourceFee`:** Constructing the transaction using simulation data from a prior ledger without refreshing fee estimates.",
+    "reproduction_steps": "curl -X POST \"https://soroban-testnet.stellar.org\" \\\n     -H \"Content-Type: application/json\" \\\n     -d '{\n       \"jsonrpc\": \"2.0\",\n       \"id\": 1,\n       \"method\": \"sendTransaction\",\n       \"params\": {\n         \"transaction\": \"AAAAAgAAAADpGsHrCHdI94ecdQ+kCJAORLt2V2oLk6H+/7asPt1kfAAAAAX/oAftBAjljQELlFpDYo3t97YZ45Kf3Uq7ihnBVVVYzAAAADwAAAAdmbl9jYWxsAAAAAA0AAAAg\"\n       }\n     }'",
+    "solutions": "1. **Dynamic Fee Estimation via `getFeeStats`:** Query the current network fee stats before envelope assembly:\n   ```typescript\n   const feeStats = await server.getFeeStats();\n   const recommendedFee = feeStats.fee_charged.mode;\n   ```\n2. **Add Surge Buffer to `minResourceFee`:** Add a 15\u201320% buffer to the `minResourceFee` returned by `simulateTransaction`:\n   ```typescript\n   const bufferedFee = Math.ceil(simResult.minResourceFee * 1.20);\n   ```\n3. **Use TrapTrace Gas Profiler:** Use `traptrace profile <xdr>` or the Web Studio Gas Profiler to inspect required resource fees in advance.",
+    "references": "- [Stellar RPC Documentation: sendTransaction](https://developers.stellar.org/docs/data/rpc/api-reference/methods/sendTransaction)\n- [Stellar Protocol 21 Surge Pricing & Fee Mechanics](https://developers.stellar.org/docs/learn/fundamentals/fees-metering)"
   },
   {
     "id": "scval-type-conversion-error",

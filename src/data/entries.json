@@ -312,6 +312,116 @@
     "references": "- [Soroban Host Environment Error Codes (rs-soroban-env)](https://github.com/stellar/rs-soroban-env)\n- [Stellar Developers: Smart Contract Events & Topics](https://developers.stellar.org/docs/learn/smart-contract-internals/events)"
   },
   {
+    "id": "instance-storage-expired",
+    "title": "Host Error - Contract Instance and Executable Storage Archived",
+    "category": "host-error",
+    "error_code": "HostError::InstanceStorageExpired",
+    "verified": true,
+    "summary": "Contract invocation failed because the contract instance or executable WASM bytecode exceeded its maximum live TTL and was archived by the network.",
+    "tags": [
+      "storage",
+      "instance-storage",
+      "archival",
+      "ttl",
+      "cap-0046",
+      "restore-footprint"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "critical",
+    "related_entries": [
+      "entry-archived-ttl-expired",
+      "temporary-storage-expired"
+    ],
+    "symptoms": "- Contract invocations revert during simulation with `HostError(Error(Storage, InstanceArchived))` or `Error(Storage, DeadEntry)`.\n- Transaction footprint indicates `ContractData` or `ContractCode` ledger keys are archived.\n- Contract execution cannot proceed until a `RestoreFootprintOp` transaction is submitted and confirmed on-chain.",
+    "root_causes": "1. **Infrequent Contract Invocation:** Contracts that remain idle without invocations or explicit TTL bumps eventually hit their `live_until_ledger` threshold.\n2. **Missing Instance TTL Bump:** Failing to execute `env.storage().instance().extend_ttl(...)` in contract initialization or execution entrypoints.\n3. **Unrestored Footprint:** Attempting to invoke an archived contract without preceding the call with a footprint restoration operation.",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, symbol_short, Env, Symbol};\n\nconst STATE_KEY: Symbol = symbol_short!(\"admin\");\n\n#[contract]\npub struct IdleContract;\n\n#[contractimpl]\nimpl IdleContract {\n    pub fn init(env: Env) {\n        // Initializes instance storage without setting an extended TTL\n        env.storage().instance().set(&STATE_KEY, &123u32);\n    }\n\n    pub fn execute(env: Env) -> u32 {\n        env.storage().instance().get(&STATE_KEY).unwrap()\n    }\n}",
+    "solutions": "1. **Restore Footprint via CLI/SDK:** Submit a restoration transaction (`soroban contract restore --id <CONTRACT_ID> --network testnet`) to revive the contract instance.\n2. **Implement Proactive TTL Bumping:** Call `env.storage().instance().extend_ttl(50_000, 100_000)` inside popular contract methods to ensure the instance never archives during regular use.\n3. **Automated Rent Monitor:** Integrate TrapTrace Storage TTL Auditor (`traptrace storage --contract <ID>`) into operational monitoring workflows.",
+    "references": "- [Stellar Docs: Restoring Archived Contracts](https://developers.stellar.org/docs/learn/smart-contract-internals/state-archival#restoring-archived-data)\n- [Soroban Storage TTL Management Guide](https://developers.stellar.org/docs/data/rpc/api-reference/simulateTransaction)"
+  },
+  {
+    "id": "invalid-scval-tag",
+    "title": "Host Error - Invalid ScVal Tag Discriminator (Malformed Val Handle)",
+    "category": "host-error",
+    "error_code": "HostError::InvalidScValTag",
+    "verified": true,
+    "summary": "Host environment rejected a value representation because the 64-bit tagged Val or ScVal discriminator byte is corrupted, unrecognized, or invalid.",
+    "tags": [
+      "host-error",
+      "scval",
+      "val",
+      "tagged-pointer",
+      "val-tag",
+      "malformed"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "critical",
+    "related_entries": [
+      "scval-type-conversion-error",
+      "host-invalid-action"
+    ],
+    "symptoms": "- Host aborts execution with `HostError(Error(Value, InvalidTag))` or `HostError(Error(Context, InvalidAction))`.\n- Diagnostic events indicate an invalid tag bitmask encountered during host object dereferencing.\n- Occurs when passing manually constructed raw byte payloads or corrupted XDR to host functions.",
+    "root_causes": "1. **Manual Bit-Manipulation on `Val`:** Constructing raw 64-bit integer values and casting them directly into Soroban `Val` without following the host's bit tagging scheme (tag bits in the lower 8 bits).\n2. **Malformed XDR Envelopes:** Binary deserialization of corrupted or truncated transaction envelopes where the `ScValType` enum discriminator is out of bounds.\n3. **Cross-Protocol Version Incompatibility:** Passing a newer `ScVal` variant to a contract compiled against an older protocol version.",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, Env, Val};\n\n#[contract]\npub struct BadTagContract;\n\n#[contractimpl]\nimpl BadTagContract {\n    pub fn trigger_bad_tag(_env: Env, raw_num: u64) -> Val {\n        // Unsafe fabrication of a tagged pointer with an illegal tag mask\n        unsafe { Val::from_payload(raw_num | 0xFF) }\n    }\n}",
+    "solutions": "1. **Use Safe Soroban SDK Types:** Avoid `Val::from_payload` or raw unsafe pointers; rely on high-level SDK primitives (`Symbol`, `Address`, `Bytes`, `Map`, `Vec`).\n2. **Verify XDR Payloads:** Validate transaction envelope XDR with `traptrace decode <xdr>` before broadcasting.\n3. **Keep SDKs Synchronized:** Ensure contracts and client libraries are built against matching Soroban SDK versions.",
+    "references": "- [Soroban Host Val & Object Architecture](https://github.com/stellar/rs-soroban-env/blob/main/soroban-env-common/src/val.rs)\n- [Stellar Developers: Data Types & SCVal](https://developers.stellar.org/docs/learn/smart-contract-internals/types)"
+  },
+  {
+    "id": "map-key-not-found",
+    "title": "Host Error - Soroban SDK Map Key Lookup Miss Panic",
+    "category": "host-error",
+    "error_code": "HostError::MapKeyNotFound",
+    "verified": true,
+    "summary": "Contract execution panicked because a key lookup on a Soroban SDK Map failed to find the key and was followed by an explicit unwrap.",
+    "tags": [
+      "host-error",
+      "map",
+      "collection",
+      "key-not-found",
+      "panic",
+      "unwrap"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "critical",
+    "related_entries": [
+      "vec-index-out-of-bounds",
+      "option-unwrap-none",
+      "storage-ledger-entry-not-found"
+    ],
+    "symptoms": "- Contract simulation reverts with `HostError(Error(Context, InvalidAction))` or `HostError(Error(Object, MissingKey))`.\n- Diagnostic events contain: `called Option::unwrap() on a None value` during Map retrieval.\n- User profile lookups, allowance lookups, or account registry lookups fail for unregistered users.",
+    "root_causes": "1. **Unsafe `map.get(key).unwrap()`:** Assuming all possible queried keys exist in the Map collection.\n2. **Missing Key Initialization:** Reading an account balance or settings map before an account has been initialized.\n3. **Key Equality Mismatch:** Querying a Map with a subtly mismatched key type (e.g., mismatched Symbol casing or different address formatting).",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, Address, Env, Map};\n\n#[contract]\npub struct MapKeyContract;\n\n#[contractimpl]\nimpl MapKeyContract {\n    pub fn get_balance(_env: Env, accounts: Map<Address, i128>, user: Address) -> i128 {\n        // Panics if user is not present in accounts map\n        accounts.get(user).unwrap()\n    }\n}",
+    "solutions": "1. **Use `get()` with `unwrap_or` or Default:**\n   ```rust\n   let balance = accounts.get(user).unwrap_or(0);\n   ```\n2. **Return `Result<T, CustomError>`:**\n   ```rust\n   let balance = accounts.get(user).ok_or(CustomError::UserNotFound)?;\n   ```\n3. **Check `contains_key()` First:** Check `if !accounts.contains_key(user)` before processing dependent logic.",
+    "references": "- [Soroban SDK Map Documentation](https://docs.rs/soroban-sdk/latest/soroban_sdk/struct.Map.html)\n- [Soroban Error Handling Best Practices](https://developers.stellar.org/docs/learn/smart-contract-internals/errors)"
+  },
+  {
+    "id": "option-unwrap-none",
+    "title": "Host Error - Rust Option::unwrap() Called on None in Contract Code",
+    "category": "host-error",
+    "error_code": "HostError::OptionUnwrapNone",
+    "verified": true,
+    "summary": "Contract execution panicked because Option::unwrap() or Result::unwrap() was invoked on a None or Err value inside the smart contract WASM bytecode.",
+    "tags": [
+      "host-error",
+      "unwrap",
+      "panic",
+      "option",
+      "rust",
+      "safe-rust"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "critical",
+    "related_entries": [
+      "vec-index-out-of-bounds",
+      "map-key-not-found",
+      "unreachable-code-reached"
+    ],
+    "symptoms": "- Contract simulation halts immediately with `HostError(Error(Context, InvalidAction))` or `HostError(Error(WasmVm, UnreachableCodeReached))`.\n- Diagnostic events contain: `panicked at 'called Option::unwrap() on a None value'`.\n- Gas is consumed up to the point of panic and all state modifications are rolled back.",
+    "root_causes": "1. **Direct `unwrap()` on Fallible Operations:** Using `.unwrap()` on storage reads, map lookups, vector element indexing, or math helpers.\n2. **Missing Input / Environment Guards:** Assuming optional parameters or ambient contract configurations are always populated.\n3. **Rust Standard Panic in WASM:** In `no_std` Soroban builds, any `panic!` invokes the WASM unreachable instruction, causing the host to trap.",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, symbol_short, Env, Symbol};\n\nconst OWNER_KEY: Symbol = symbol_short!(\"owner\");\n\n#[contract]\npub struct UnwrapContract;\n\n#[contractimpl]\nimpl UnwrapContract {\n    pub fn get_owner(env: Env) -> Symbol {\n        // Panics if OWNER_KEY was not previously written to instance storage\n        env.storage().instance().get(&OWNER_KEY).unwrap()\n    }\n}",
+    "solutions": "1. **Use `?` Operator with Custom Error Enums:**\n   ```rust\n   #[contracterror]\n   #[derive(Copy, Clone, Debug, Eq, PartialEq, PartialOrd, Ord)]\n   #[repr(u32)]\n   pub enum Error {\n       NotInitialized = 1,\n   }\n\n   pub fn get_owner(env: Env) -> Result<Symbol, Error> {\n       env.storage().instance().get(&OWNER_KEY).ok_or(Error::NotInitialized)\n   }\n   ```\n2. **Use `unwrap_or()` or `unwrap_or_else()`:** Provide safe fallback defaults for non-critical reads.\n3. **Use TrapTrace Linter:** Run `traptrace lint <file.rs>` to automatically detect unsafe `.unwrap()` patterns before compiling.",
+    "references": "- [Soroban Custom Errors Guide](https://developers.stellar.org/docs/learn/smart-contract-internals/errors#custom-errors)\n- [Rust Error Handling Book](https://doc.rust-lang.org/book/ch09-02-recoverable-errors-with-result.html)"
+  },
+  {
     "id": "require-auth-missing",
     "title": "Host Error - Missing Required Invocation Authorization",
     "category": "host-error",
@@ -337,6 +447,32 @@
     "reproduction_steps": "use soroban_sdk::{contract, contractimpl, Address, Env};\n\n#[contract]\npub struct AdminOnlyContract;\n\n#[contractimpl]\nimpl AdminOnlyContract {\n    pub fn update_admin(env: Env, new_admin: Address) {\n        let current_admin: Address = env.storage().instance().get(&1u32).unwrap();\n        // Fails if current_admin has not signed the invocation\n        current_admin.require_auth();\n        env.storage().instance().set(&1u32, &new_admin);\n    }\n}",
     "solutions": "1. **Include Auth Entries:** In client applications using JS/Python/Rust SDKs, simulate the transaction first to generate the required `auth` tree and sign each required entry.\n2. **Authorizing Contract Calls:** If calling between contracts, use `Address::require_auth_for_args(&address, args)` to explicitly authorize arguments passed to nested contracts.\n3. **Inspect Auth Trees with CLI:** Run `traptrace simulate <xdr>` to inspect required authorizers and verify whether all needed signatures are included.",
     "references": "- [Stellar Developers: Soroban Authorization Architecture](https://developers.stellar.org/docs/learn/smart-contract-internals/authorization)\n- [Soroban Rust SDK Address::require_auth](https://docs.rs/soroban-sdk/latest/soroban_sdk/struct.Address.html#method.require_auth)"
+  },
+  {
+    "id": "storage-key-size-exceeds-limit",
+    "title": "Host Error - Ledger Storage Key Size Exceeds Network Cap",
+    "category": "host-error",
+    "error_code": "HostError::StorageKeySizeLimit",
+    "verified": true,
+    "summary": "Contract attempted to persist a storage entry whose key exceeds Soroban's maximum ledger key size limit (typically 64KB or protocol cap).",
+    "tags": [
+      "storage",
+      "limits",
+      "key-size",
+      "protocol-limits",
+      "scval"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "warning",
+    "related_entries": [
+      "contract-data-size-exceeds-limit",
+      "host-invalid-action"
+    ],
+    "symptoms": "- Contract simulation fails during storage write with `HostError(Error(Storage, KeySizeLimitExceeded))` or `HostError(Error(Context, InvalidAction))`.\n- Writing dynamic keys containing large byte buffers or concatenated strings causes transactions to abort immediately.\n- RPC simulation returns zero execution progress past the storage write instruction.",
+    "root_causes": "1. **Embedding Payloads Inside Storage Keys:** Using arbitrary user-supplied data (such as IPFS hashes, large string IDs, or public keys combined with descriptions) directly as a storage key instead of computing a fixed-size hash.\n2. **Unbounded Key Structures:** Serializing complex structs or nested tuples into storage keys without enforcing fixed upper bounds.\n3. **Protocol Key Size Quota Violation:** Exceeding Soroban's strict protocol limits on `ScVal` key serialization length.",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, Bytes, Env};\n\n#[contract]\npub struct HugeKeyContract;\n\n#[contractimpl]\nimpl HugeKeyContract {\n    pub fn write_oversized_key(env: Env, large_key_data: Bytes, value: u32) {\n        // Attempting to write a key larger than allowable ledger limits\n        env.storage().persistent().set(&large_key_data, &value);\n    }\n}",
+    "solutions": "1. **Hash Dynamic Keys with SHA-256 / Keccak:** Hash variable-length keys using `env.crypto().sha256(&large_key_data)` to produce a deterministic 32-byte `BytesN<32>` key.\n2. **Use Enums / Symbols for Fixed Keys:** Use short symbols (`symbol_short!(\"admin\")`) or typed enums (`DataKey::Balance(Address)`) for predictable key sizes.\n3. **Validate Key Lengths:** Enforce strict input validation in contract arguments before executing storage calls.",
+    "references": "- [Stellar Network Protocol Limits](https://developers.stellar.org/docs/learn/fundamentals/stellar-data-structures/operations-and-transactions)\n- [Soroban Crypto Host Functions](https://docs.rs/soroban-sdk/latest/soroban_sdk/struct.Crypto.html)"
   },
   {
     "id": "storage-ledger-entry-not-found",
@@ -417,6 +553,33 @@
     "references": "- [Stellar Developers: Soroban Custom Errors and ContractError](https://developers.stellar.org/docs/learn/smart-contract-internals/errors)\n- [Soroban Rust SDK ContractError Attribute](https://docs.rs/soroban-sdk/latest/soroban_sdk/attr.contracterror.html)"
   },
   {
+    "id": "temporary-storage-expired",
+    "title": "Host Error - Temporary Ledger Storage Entry Expired (TTL Evicted)",
+    "category": "host-error",
+    "error_code": "HostError::TemporaryStorageExpired",
+    "verified": true,
+    "summary": "Contract attempted to read or write a temporary storage key whose time-to-live (TTL) passed without being bumped, resulting in permanent eviction.",
+    "tags": [
+      "storage",
+      "ttl",
+      "temporary-storage",
+      "eviction",
+      "cap-0046",
+      "rent"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "critical",
+    "related_entries": [
+      "entry-archived-ttl-expired",
+      "storage-ledger-entry-not-found"
+    ],
+    "symptoms": "- Contract simulation fails with `HostError(Error(Storage, DeadEntry))` or `Error(Storage, MissingValue)`.\n- Temporary state keys (nonces, short-lived signatures, session authorizations) cannot be read after a ledger threshold.\n- Unlike Persistent storage entries, calling `extend_ttl` or restoration transactions fails because temporary entries are permanently deleted upon TTL expiration.",
+    "root_causes": "1. **Failure to Bump Temporary TTL:** Temporary storage entries (`env.storage().temporary()`) were created with a short initial TTL (e.g., 16 ledgers) and never renewed using `env.storage().temporary().extend_ttl(...)`.\n2. **Permanent Deletion Model:** Soroban state archival (CAP-0046) treats temporary entries as ephemeral; once expired, they cannot be restored via `RestoreFootprintOp`.\n3. **Misclassifying Persistent State as Temporary:** Storing critical protocol state (user balances, pool reserves) in temporary storage rather than persistent or instance storage.",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, symbol_short, Env, Symbol};\n\nconst TEMP_KEY: Symbol = symbol_short!(\"session\");\n\n#[contract]\npub struct TempStorageContract;\n\n#[contractimpl]\nimpl TempStorageContract {\n    pub fn init_session(env: Env, user_id: u32) {\n        // Stored in temporary storage without TTL extension\n        env.storage().temporary().set(&TEMP_KEY, &user_id);\n    }\n\n    pub fn get_session(env: Env) -> u32 {\n        // Fails with Storage DeadEntry if called after temporary TTL expires\n        env.storage().temporary().get(&TEMP_KEY).unwrap()\n    }\n}",
+    "solutions": "1. **Extend Temporary TTL on Read/Write:** Call `env.storage().temporary().extend_ttl(&TEMP_KEY, threshold, extend_to)` whenever accessing active sessions.\n2. **Use Persistent Storage for State:** Use `env.storage().persistent()` for ledger data that may need to be restored if archived.\n3. **Use Instance Storage for Shared Protocol State:** Store contract admin and configuration data in `env.storage().instance()`.",
+    "references": "- [Stellar Docs: State Archival & Storage Types](https://developers.stellar.org/docs/learn/smart-contract-internals/state-archival)\n- [CAP-0046: Soroban State Archival](https://github.com/stellar/stellar-protocol/blob/master/core/cap-0046.md)"
+  },
+  {
     "id": "unreachable-code-reached",
     "title": "Host Error - WASM Unreachable Code Reached (Panic)",
     "category": "host-error",
@@ -438,6 +601,34 @@
     "reproduction_steps": "pub fn divide(env: Env, a: u64, b: u64) -> u64 {\n    // Triggers unreachable code panic when b == 0\n    a / b\n}",
     "solutions": "1. **Use Checked Operations & Match:** Avoid `.unwrap()`. Return `Result<T, ContractError>` instead.\n2. **Safe Math & Boundary Checks:** Validate inputs before indexing or performing division.\n\n```rust\npub fn safe_divide(env: Env, a: u64, b: u64) -> Result<u64, Error> {\n    if b == 0 {\n        return Err(Error::from_contract_error(1));\n    }\n    Ok(a / b)\n}\n```",
     "references": "- [Soroban Error Handling Best Practices](https://developers.stellar.org/docs/build/smart-contracts/getting-started/errors)"
+  },
+  {
+    "id": "vec-index-out-of-bounds",
+    "title": "Host Error - Soroban SDK Vec Index Out of Bounds Panic",
+    "category": "host-error",
+    "error_code": "HostError::VecIndexOutOfBounds",
+    "verified": true,
+    "summary": "Contract execution panicked because an indexing operation on a Soroban SDK Vec accessed an index greater than or equal to the vector length.",
+    "tags": [
+      "host-error",
+      "vec",
+      "collection",
+      "index-out-of-bounds",
+      "panic",
+      "bounds-check"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "critical",
+    "related_entries": [
+      "map-key-not-found",
+      "option-unwrap-none",
+      "unreachable-code-reached"
+    ],
+    "symptoms": "- Contract simulation reverts abruptly with `HostError(Error(Context, InvalidAction))` or `HostError(Error(Object, IndexOutOfBounds))`.\n- Diagnostic events contain a panic message: `index out of bounds: the len is X but the index is Y`.\n- Multi-recipient payouts or batch array iterations crash mid-execution.",
+    "root_causes": "1. **Unchecked Direct Indexing:** Calling `vec.get(index).unwrap()` or `vec.get_unchecked(index)` where `index >= vec.len()`.\n2. **Off-by-One Loop Iteration:** Using `<=` instead of `<` in numeric iteration loops over vector lengths.\n3. **Empty Collection Assumptions:** Assuming a contract state vector or user input list has at least one element without guarding `if vec.is_empty()`.",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, vec, Env, Vec};\n\n#[contract]\npub struct VecBoundsContract;\n\n#[contractimpl]\nimpl VecBoundsContract {\n    pub fn get_element(env: Env, index: u32) -> u32 {\n        let items: Vec<u32> = vec![&env, 10, 20, 30];\n        // Panics if index >= 3\n        items.get(index).unwrap()\n    }\n}",
+    "solutions": "1. **Use `get()` and Match/Handle `None`:** Instead of unwrapping, handle `None` gracefully:\n   ```rust\n   match items.get(index) {\n       Some(val) => Ok(val),\n       None => Err(Error::ItemNotFound),\n   }\n   ```\n2. **Validate Input Index:** Check `if index >= items.len() { return Err(Error::OutOfBounds); }`.\n3. **Use Iterators:** Iterate elements directly with `for item in items.iter()` to eliminate manual indexing errors.",
+    "references": "- [Soroban SDK Vec Documentation](https://docs.rs/soroban-sdk/latest/soroban_sdk/struct.Vec.html)\n- [Rust Array and Vector Bounds Checking](https://doc.rust-lang.org/book/ch08-01-vectors.html)"
   },
   {
     "id": "wasm-memory-exhausted",
@@ -511,6 +702,33 @@
     "reproduction_steps": "curl -s -X POST https://soroban-testnet.stellar.org \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"jsonrpc\": \"2.0\",\n    \"id\": 1,\n    \"method\": \"getLedgerEntries\",\n    \"params\": {\n      \"keys\": [\n        \"AAAAFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAEAAAAEdGVzdAAAAAA=\"\n      ]\n    }\n  }'",
     "solutions": "1. **Initialize State:** Execute contract setup/init function first.\n2. **Check Archival Status:** Query state archival RPC endpoint to verify if restoration is required.",
     "references": "- [Stellar RPC API Specification: getLedgerEntries](https://developers.stellar.org/docs/data/rpc/api-reference/methods/getLedgerEntries)"
+  },
+  {
+    "id": "scval-type-conversion-error",
+    "title": "SDK Error - ScVal to Native Rust Type Conversion Failed",
+    "category": "sdk-error",
+    "error_code": "SDK::ScValConversionFailed",
+    "verified": true,
+    "summary": "Soroban SDK or client library failed to convert a serialized ScVal or Val handle into the expected native Rust type (e.g. integer width mismatch or invalid symbol).",
+    "tags": [
+      "sdk",
+      "scval",
+      "type-conversion",
+      "val",
+      "conversion",
+      "deserialization"
+    ],
+    "soroban_version": "21.0.0",
+    "severity": "warning",
+    "related_entries": [
+      "value-conversion-failed",
+      "invalid-scval-tag"
+    ],
+    "symptoms": "- Contract invocations panic with `ConversionError` when deserializing function arguments or returned values.\n- Client SDKs (JS/TS, Python) fail with `Invalid ScVal discriminator` or `Cannot convert ScVal to BigInt`.\n- Contract tests fail with `TryFromVal failed for target type`.",
+    "root_causes": "1. **Integer Size Mismatches:** Passing an `i32` or `u32` into a function argument typed as `i128` or `u64` without explicit type coercion.\n2. **Invalid Symbol Character Encoding:** Constructing `Symbol` or `symbol_short!` with characters outside the allowed alphanumeric + underscore set or exceeding length limits.\n3. **Mismatched Struct Shape:** Contract ABI expected a tuple/struct with specific field keys, but the client passed a generic vector or mismatched map.",
+    "reproduction_steps": "use soroban_sdk::{contract, contractimpl, symbol_short, Env, Symbol};\n\n#[contract]\npub struct ConversionContract;\n\n#[contractimpl]\nimpl ConversionContract {\n    pub fn process_amount(_env: Env, amount: i128) -> i128 {\n        amount\n    }\n}",
+    "solutions": "1. **Use Explicit ScVal Type Constructors:** Construct arguments explicitly in SDKs (`nativeToScVal(100n, { type: 'i128' })`).\n2. **Use `TryFromVal` for Safe Conversion:** In Rust contracts, convert dynamic values using `.try_into_val(&env)` and handle conversion errors explicitly.\n3. **Inspect Contract ABI:** Use `traptrace abi <contract_id>` or the Web Studio WASM ABI tab to verify exact function signature types before calling.",
+    "references": "- [Soroban Types & Conversions](https://developers.stellar.org/docs/learn/smart-contract-internals/types)\n- [Stellar SDK ScVal Serialization](https://stellar.github.io/js-stellar-sdk/)"
   },
   {
     "id": "value-conversion-failed",

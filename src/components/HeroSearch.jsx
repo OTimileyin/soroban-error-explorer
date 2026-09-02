@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Search, X, Command, Terminal } from 'lucide-react';
+import { Search, X, Command } from 'lucide-react';
 
 export default function HeroSearch({ searchQuery, setSearchQuery }) {
   const inputRef = useRef(null);
@@ -18,9 +18,6 @@ export default function HeroSearch({ searchQuery, setSearchQuery }) {
   return (
     <section className="hero">
       <div className="hero-inner">
-        <span className="hero-eyebrow">
-          <Terminal size={14} /> Stellar Soroban · Debug Faster
-        </span>
 
         <h1 className="hero-title">
           Search Soroban Smart Contract Errors &amp; Fixes

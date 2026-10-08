@@ -53,22 +53,10 @@ import TestGenTab from './TestGenTab';
 const DEMO_PRESETS = {
   tx: [
     {
-      label: 'Budget Exceeded Trap',
-      hash: '6a4b2c1d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b',
+      label: 'Jisr Testnet fee-split payment',
+      hash: '6e79ed7847d34d19fb0d9f8bf43282cd583972537a41d539559a610a7f108910',
       network: 'testnet',
-      desc: 'Simulated contract invocation exceeding WASM CPU limits'
-    },
-    {
-      label: 'State Archival / Expired TTL',
-      hash: '9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e',
-      network: 'testnet',
-      desc: 'Accessing archived persistent storage without restoration'
-    },
-    {
-      label: 'Simulate Auth Signature Error',
-      hash: '1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b',
-      network: 'testnet',
-      desc: 'Missing or invalid cryptographic signature on invocation'
+      desc: 'Successful 1 XLM router payment, observed October 8, 2026'
     }
   ],
   simulation: [
@@ -387,7 +375,7 @@ export default function LiveStudio({ catalogEntries, onSelectEntry }) {
           </div>
         </div>
         <p style={{ color: 'var(--color-slate)', margin: 0, fontSize: '15px', maxWidth: '850px' }}>
-          Test operational Soroban diagnostics in real time. Inspect failed transaction hashes, simulate contract envelopes, stream live contract events and traps, decode diagnostic events, and audit storage TTL on Stellar testnet.
+          Inspect transaction observations, simulate envelopes, fetch contract events and read deployed WASM specifications. Authorization decoding does not verify signatures; storage activity does not establish TTL or archival status.
         </p>
       </div>
 

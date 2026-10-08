@@ -151,3 +151,12 @@ trivial; planning only. Actual Wave complexity and enrollment are set by maintai
 ## Contribution
 
 Open a focused feat/fix/test/docs branch. PRs explain behavior and actual validation and include Closes #<issue_id>. Follow CONTRIBUTING.md and SECURITY.md.
+
+## Published contributor issues
+
+- [Add browser acceptance for real ABI and auth inspection](https://github.com/TrapTrace/soroban-error-explorer/issues/7) — proposed medium.
+- [Validate batch response identity and stale requests](https://github.com/TrapTrace/soroban-error-explorer/issues/8) — proposed medium.
+- [Replace synthetic transaction presets with reviewed captures](https://github.com/TrapTrace/soroban-error-explorer/issues/9) — proposed medium.
+- [Implement actual storage entry TTL inspection](https://github.com/TrapTrace/soroban-error-explorer/issues/10) — proposed high.
+- [Decode diagnostic-event XDR structurally](https://github.com/TrapTrace/soroban-error-explorer/issues/11) — proposed high.
+- [Document RPC endpoints and hosted revision](https://github.com/TrapTrace/soroban-error-explorer/issues/12) — proposed trivial.

@@ -33,7 +33,7 @@ export default function AbiInspectorTab({ network }) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="abi-inspector space-y-6">
       <div className="bg-ink-900 border border-ink-800 rounded-xl p-5">
         <div className="flex items-center gap-3 mb-4">
           <Cpu className="w-5 h-5 text-teal-400" />

@@ -1,0 +1,68 @@
+{
+  "checked_at": "2026-10-08T13:27:35.307Z",
+  "source": "live Testnet RPC and deployed WASM",
+  "contractId": "CCGSUUQLWXKU6AZ6YKUNXLR7R6KLBYBG4AJGJ54XV4DC63AJ3LDVPNW4",
+  "network": "testnet",
+  "functions": [
+    {
+      "name": "policy",
+      "doc": "",
+      "inputs": [],
+      "outputs": [
+        {
+          "type": "Policy"
+        }
+      ]
+    },
+    {
+      "name": "__constructor",
+      "doc": "",
+      "inputs": [
+        {
+          "name": "treasury",
+          "type": "Address"
+        },
+        {
+          "name": "token",
+          "type": "Address"
+        },
+        {
+          "name": "fee_bps",
+          "type": "U32"
+        }
+      ],
+      "outputs": []
+    },
+    {
+      "name": "route_payment",
+      "doc": "",
+      "inputs": [
+        {
+          "name": "sender",
+          "type": "Address"
+        },
+        {
+          "name": "recipient",
+          "type": "Address"
+        },
+        {
+          "name": "platform_treasury",
+          "type": "Address"
+        },
+        {
+          "name": "token_address",
+          "type": "Address"
+        },
+        {
+          "name": "amount",
+          "type": "I128"
+        }
+      ],
+      "outputs": [
+        {
+          "type": "I128"
+        }
+      ]
+    }
+  ]
+}

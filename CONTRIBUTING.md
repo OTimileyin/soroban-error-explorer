@@ -34,3 +34,5 @@ npm run build
 - **Typography:** IBM Plex Mono + IBM Plex Sans.
 - **Accessibility:** Ensure buttons have accessible labels, contrast complies with WCAG AA, and interactive modals trap focus properly.
 - **Theme Support:** All new components must support both Dark and Light themes via CSS variables.
+
+Before review run npm test and npm run build. PRs include Closes #<issue_id>, actual validation and screenshots for UI changes. Unknown network observations must stay unknown; never return sample results as live observations.

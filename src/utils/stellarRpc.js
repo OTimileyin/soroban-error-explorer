@@ -46,7 +46,8 @@ export async function sendRpcRequest(method, params = {}, network = 'testnet', c
   const response = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(payload)
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(10000)
   });
 
   if (!response.ok) {
@@ -92,7 +93,7 @@ export async function inspectTransaction(txHash, network = 'testnet', customRpc 
   const horizonUrl = NETWORKS[network]?.horizonUrl;
   if (horizonUrl) {
     try {
-      const resp = await fetch(`${horizonUrl}/transactions/${cleanHash}`);
+      const resp = await fetch(`${horizonUrl}/transactions/${cleanHash}`, { signal: AbortSignal.timeout(10000) });
       if (resp.ok) {
         horizonResult = await resp.json();
       }

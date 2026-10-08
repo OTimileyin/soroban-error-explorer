@@ -1,17 +1,35 @@
-import React, { useState } from 'react';
-import { Cpu, Search, FileCode, ChevronRight } from 'lucide-react';
-import { parseContractSpec } from '../utils/wasmInspector';
+import React, { useEffect, useRef, useState } from 'react';
+import { Cpu, Search } from 'lucide-react';
+import { fetchContractSpec } from '../utils/wasmInspector';
 
 export default function AbiInspectorTab({ network }) {
   const [contractId, setContractId] = useState('CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC');
   const [spec, setSpec] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const requestId = useRef(0);
+
+  useEffect(() => {
+    requestId.current += 1;
+    setSpec(null);
+    setError(null);
+    setLoading(false);
+    return () => { requestId.current += 1; };
+  }, [network]);
 
   const fetchSpec = async () => {
+    const id = ++requestId.current;
     setLoading(true);
-    await new Promise(r => setTimeout(r, 400));
-    setSpec(parseContractSpec());
-    setLoading(false);
+    setSpec(null);
+    setError(null);
+    try {
+      const result = await fetchContractSpec(contractId.trim(), network);
+      if (requestId.current === id) setSpec(result);
+    } catch (err) {
+      if (requestId.current === id) setError(err.message);
+    } finally {
+      if (requestId.current === id) setLoading(false);
+    }
   };
 
   return (
@@ -22,13 +40,20 @@ export default function AbiInspectorTab({ network }) {
           <h3 className="text-base font-mono font-semibold text-paper-100">Contract WASM ABI & Spec Inspector</h3>
         </div>
         <p className="text-xs text-paper-400 mb-3">
-          Fetch and inspect exported functions, argument types, return structures, and custom contract types directly from on-chain instance state on {network}.
+          Read declared functions and their argument and return types from the deployed contract on {network}.
         </p>
         <div className="flex gap-2">
           <input
+            aria-label="Contract address"
             type="text"
             value={contractId}
-            onChange={(e) => setContractId(e.target.value)}
+            onChange={(e) => {
+              requestId.current += 1;
+              setContractId(e.target.value);
+              setSpec(null);
+              setError(null);
+              setLoading(false);
+            }}
             placeholder="Contract Address (C...)"
             className="flex-1 bg-ink-950 border border-ink-800 rounded-lg px-3 py-2 text-xs font-mono text-paper-200 focus:outline-none focus:border-teal-500"
           />
@@ -43,15 +68,19 @@ export default function AbiInspectorTab({ network }) {
         </div>
       </div>
 
+      {error && <p role="alert" className="text-xs text-amber-400">{error}</p>}
+
       {spec && (
         <div className="bg-ink-900 border border-ink-800 rounded-xl p-5 space-y-4">
           <h4 className="text-xs font-mono font-bold text-paper-300">Exported Functions ({spec.functions.length})</h4>
+          <p className="text-xs font-mono text-paper-400 break-all">{spec.contractId} · {spec.network}</p>
+          {spec.functions.length === 0 && <p className="text-xs text-paper-400">No declared functions found.</p>}
           <div className="space-y-2">
             {spec.functions.map((fn) => (
               <div key={fn.name} className="p-3 bg-ink-950 rounded-lg border border-ink-800 font-mono text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-paper-100 font-bold">{fn.name}(<span className="text-teal-400">{fn.inputs.map(i => `${i.name}: ${i.type}`).join(', ')}</span>)</span>
-                  <span className="text-amber-400 font-bold">→ {fn.outputs[0].type}</span>
+                  <span className="text-amber-400 font-bold">→ {fn.outputs.map(output => output.type).join(', ') || 'Void'}</span>
                 </div>
                 <p className="text-[11px] text-paper-400 mt-1">{fn.doc}</p>
               </div>

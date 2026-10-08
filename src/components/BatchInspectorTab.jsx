@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { inspectTransaction } from '../utils/stellarRpc.js';
 import { Layers, Play, CheckCircle2, XCircle, AlertTriangle, FileText, Download } from 'lucide-react';
 
 export default function BatchInspectorTab({ rpcClient, network }) {
@@ -10,34 +11,26 @@ export default function BatchInspectorTab({ rpcClient, network }) {
   const [report, setReport] = useState(null);
 
   const runBatch = async () => {
+    setRunning(true);
+    setReport(null);
     try {
       const hashes = JSON.parse(jsonInput);
-      if (!Array.isArray(hashes)) throw new Error("Input must be a JSON array of transaction hashes");
-      
-      setRunning(true);
-      
-      // Simulate multi-transaction diagnostics
-      await new Promise(r => setTimeout(r, 600));
-      
-      const res = {
-        total: hashes.length,
-        success: Math.max(1, Math.floor(hashes.length / 2)),
-        failed: Math.ceil(hashes.length / 2),
-        avgCpu: 14200000,
-        avgMem: 450000,
-        items: hashes.map((h, i) => ({
-          hash: h,
-          success: i % 2 === 0,
-          rootCause: i % 2 === 0 ? null : "HostError::ArithDomain",
-          cpu: 8500000 + i * 2000000
-        }))
-      };
-      setReport(res);
-    } catch (e) {
-      alert("Invalid JSON format: " + e.message);
-    } finally {
-      setRunning(false);
-    }
+      if (!Array.isArray(hashes) || hashes.length === 0 || hashes.length > 20
+          || hashes.some(hash => typeof hash !== 'string' || !/^[a-f0-9]{64}$/i.test(hash))) {
+        throw new Error('Enter 1–20 transaction hashes in a JSON array');
+      }
+      let success = 0, failed = 0, unknown = 0;
+      for (const hash of hashes) {
+        const observation = await inspectTransaction(hash, network);
+        const status = observation.rpcResult?.status;
+        if (status === 'SUCCESS' || observation.horizonResult?.successful === true) success++;
+        else if (status === 'FAILED' || observation.horizonResult?.successful === false) failed++;
+        else unknown++;
+      }
+      setReport({ total: hashes.length, success, failed, unknown });
+    } catch (error) {
+      setReport({ error: error.message });
+    } finally { setRunning(false); }
   };
 
   return (
@@ -48,7 +41,7 @@ export default function BatchInspectorTab({ rpcClient, network }) {
           <h3 className="text-base font-mono font-semibold text-paper-100">Multi-Transaction Batch Inspector</h3>
         </div>
         <p className="text-xs text-paper-400 mb-3">
-          Paste a JSON array of transaction hashes to run batch root-cause diagnostics, calculate aggregate failure rates, and summarize resource costs on {network}.
+          Paste a JSON array of transaction hashes to run batch root-cause diagnostics, summarize successful, failed and unknown observations on {network}.
         </p>
         <textarea
           rows={4}
@@ -66,7 +59,9 @@ export default function BatchInspectorTab({ rpcClient, network }) {
         </button>
       </div>
 
-      {report && (
+      {report?.error && <p role="alert" className="text-xs text-amber-400">{report.error}</p>}
+
+      {report && !report.error && (
         <div className="bg-ink-900 border border-ink-800 rounded-xl p-5 space-y-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
             <div className="bg-ink-950 p-3 rounded-lg border border-ink-800">
@@ -82,8 +77,8 @@ export default function BatchInspectorTab({ rpcClient, network }) {
               <div className="text-lg font-mono font-bold text-rose-400">{report.failed}</div>
             </div>
             <div className="bg-ink-950 p-3 rounded-lg border border-ink-800">
-              <div className="text-xs text-paper-400 font-mono">Avg CPU Gas</div>
-              <div className="text-lg font-mono font-bold text-amber-400">{(report.avgCpu / 1000000).toFixed(1)}M</div>
+              <div className="text-xs text-paper-400 font-mono">Unknown / Unavailable</div>
+              <div className="text-lg font-mono font-bold text-amber-400">{report.unknown}</div>
             </div>
           </div>
         </div>
